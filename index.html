@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Random Card Drawer</title>
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --accent:#9b5cff; --muted:#98a0b3; --white:#f7f8fb;
+    --shadow: 0 8px 24px rgba(11,18,32,0.6);
+  }
+  html,body{height:100%; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; background:linear-gradient(180deg,#071025 0%, #0f1724 100%); color:var(--white);}
+  .wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px;}
+  .card-app{width:100%; max-width:920px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06)); border-radius:14px; box-shadow:var(--shadow); padding:20px; display:grid; grid-template-columns: 1fr 360px; gap:18px; align-items:start;}
+  @media (max-width:880px){ .card-app{grid-template-columns:1fr; max-width:720px;}}
+  .left{padding:8px;}
+  .card-visual{background:var(--card); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:12px; align-items:center; justify-content:center; min-height:420px;}
+  .card-image{width:100%; max-width:420px; height:300px; background:#06101a; border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .card-image img{width:100%; height:100%; object-fit:cover; display:block; transform-origin:center; transition: transform .45s ease, filter .35s ease;}
+  .card-image img.revealed{ transform: scale(1); filter: none;}
+  .card-image img.hidden{ transform: scale(0.98); filter: blur(6px) grayscale(.1) contrast(.9);}
+  .card-meta{width:100%; text-align:center;}
+  .card-title{font-size:1.25rem; font-weight:600; margin:4px 0;}
+  .card-desc{color:var(--muted); font-size:0.95rem; min-height:48px;}
+  .action-row{display:flex; gap:10px; margin-top:8px; justify-content:center;}
+  button{cursor:pointer; border:0; background:var(--accent); color:white; padding:10px 14px; border-radius:10px; font-weight:600; box-shadow:0 6px 18px rgba(155,92,255,0.14); transition:transform .12s ease, opacity .12s;}
+  button.secondary{background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--white); font-weight:600;}
+  button:active{transform:translateY(1px);}
+  .right{padding:8px; display:flex; flex-direction:column; gap:12px;}
+  .deck-info{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.03)); padding:12px; border-radius:10px; color:var(--muted);}
+  ul.cards-list{list-style:none; padding:8px 0 0 0; margin:0; max-height:300px; overflow:auto;}
+  li.card-item{display:flex; gap:8px; align-items:center; padding:6px 6px; border-radius:8px;}
+  li.card-item img{width:44px; height:44px; object-fit:cover; border-radius:6px; flex-shrink:0;}
+  li.card-item .ci-title{font-size:0.95rem; color:var(--white);}
+  .small{font-size:0.86rem; color:var(--muted);}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+  footer{font-size:0.8rem; color:var(--muted); text-align:center; margin-top:14px;}
+  .kbd{background:#071024; border:1px solid rgba(255,255,255,0.02); padding:4px 8px; border-radius:6px; font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <main class="card-app" role="application" aria-label="Random card drawer">
+    <section class="left" aria-hidden="false">
+      <div class="card-visual" id="cardVisual">
+        <div class="card-image" id="imgWrap">
+          <img id="cardImg" class="hidden" alt="Card image placeholder" src="" />
+        </div>
+        <div class="card-meta">
+          <div class="card-title" id="cardTitle">Welcome — draw a card</div>
+          <div class="card-desc" id="cardDesc">Click <strong>Draw</strong> or press <span class="kbd">Space</span> to pull a random card from the deck.</div>
+          <div class="action-row" role="group" aria-label="card controls">
+            <button id="drawBtn" title="Draw a random card">Draw</button>
+            <button id="resetBtn" class="secondary" title="Reset deck (shuffle)"><span>Reset Deck</span></button>
+            <button id="shuffleBtn" class="secondary" title="Shuffle unseen cards"><span>Shuffle</span></button>
+          </div>
+        </div>
+      </div>
+      <footer class="small">Deck draws without repeats until deck is exhausted. Images are hosted where you choose.</footer>
+    </section>
+
+    <aside class="right" aria-label="deck info">
+      <div class="deck-info">
+        <div><strong>Deck size:</strong> <span id="deckSize">0</span> cards</div>
+        <div class="small">Remaining: <strong id="remaining">0</strong></div>
+
+        <div class="controls" style="margin-top:10px;">
+          <button id="exportBtn" class="secondary" title="Download deck JSON">Export deck (JSON)</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-weight:700">All cards</div>
+          <div class="small">Preview</div>
+        </div>
+        <ul class="cards-list" id="cardsList" aria-live="polite"></ul>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+/* ---------------------------
+  CONFIG: edit this array
+  - img can be relative (cards/card1.jpg) or full URL (https://...)
+  - alt should describe the image for accessibility
+----------------------------*/
+const cards = [
+  { id: "c01", title: "Seed of Calm", desc: "A reminder to slow your breath and return to center.", img: "cards/card1.jpg", alt: "A blue mandala" },
+  { id: "c02", title: "Open Threshold", desc: "Step through gently — new entry, new code.", img: "cards/card2.jpg", alt: "A doorway of light" },
+  { id: "c03", title: "Bearing Light", desc: "Share a steady presence; that steadiness is medicine.", img: "cards/card3.jpg", alt: "A candle flame" },
+  { id: "c04", title: "The Knot Untied", desc: "Release the small binding story. You are freer than you think.", img: "cards/card4.jpg", alt: "Untied rope in sunlight" },
+  { id: "c05", title: "Hidden City", desc: "A pattern appears when you look with gentleness.", img: "cards/card5.jpg", alt: "Aerial city pattern" },
+  { id: "c06", title: "Return", desc: "Return to the body. Return to the breath. Remember the field.", img: "cards/card6.jpg", alt: "Hands holding water" }
+];
+
+/* ---- internal state ---- */
+let deck = [];
+let history = [];
+
+/* ---- util: Fisher-Yates shuffle ---- */
+function shuffleArray(a){
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+/* ---- initialize deck (clone and shuffle) ---- */
+function initDeck(){
+  deck = cards.slice(); // shallow copy
+  shuffleArray(deck);
+  history = [];
+  updateUI();
+  preloadImages(deck);
+}
+
+/* ---- preload images for faster display ---- */
+function preloadImages(list){
+  list.forEach(c => {
+    if(c.img){
+      const pre = new Image();
+      pre.src = c.img;
+    }
+  });
+}
+
+/* ---- draw a card ---- */
+function drawCard(){
+  if(deck.length === 0){
+    // optional: reinitialize & inform
+    initDeck();
+    // small delay message
+  }
+  const card = deck.pop();
+  history.push(card);
+  showCard(card);
+  updateUI();
+}
+
+/* ---- show card in UI with gentle animation ---- */
+function showCard(card){
+  const img = document.getElementById('cardImg');
+  const title = document.getElementById('cardTitle');
+  const desc = document.getElementById('cardDesc');
+
+  // reveal sequence
+  img.classList.remove('revealed');
+  img.classList.add('hidden');
+  // small fade handled via CSS transition
+  setTimeout(()=>{
+    img.src = card.img || '';
+    img.alt = card.alt || card.title || 'Card image';
+    title.textContent = card.title || '—';
+    desc.textContent = card.desc || '';
+    // force reflow then reveal
+    void img.offsetHeight;
+    img.classList.remove('hidden');
+    img.classList.add('revealed');
+  }, 120);
+}
+
+/* ---- UI helpers ---- */
+function updateUI(){
+  document.getElementById('deckSize').textContent = cards.length;
+  document.getElementById('remaining').textContent = deck.length;
+  const list = document.getElementById('cardsList');
+  list.innerHTML = '';
+  cards.forEach(c=>{
+    const li = document.createElement('li');
+    li.className = 'card-item';
+    const thumb = document.createElement('img');
+    thumb.src = c.img;
+    thumb.alt = c.alt || c.title;
+    const txt = document.createElement('div');
+    txt.innerHTML = `<div class="ci-title">${c.title}</div><div class="small">${c.desc}</div>`;
+    li.appendChild(thumb);
+    li.appendChild(txt);
+    list.appendChild(li);
+  });
+}
+
+/* ---- controls ---- */
+document.getElementById('drawBtn').addEventListener('click', (e)=>{
+  drawCard();
+});
+document.getElementById('resetBtn').addEventListener('click', (e)=>{
+  initDeck();
+  // reveal top card placeholder
+  document.getElementById('cardTitle').textContent = 'Deck reset — draw when ready';
+  document.getElementById('cardDesc').textContent = 'Deck shuffled.';
+  const img = document.getElementById('cardImg');
+  img.src = '';
+  img.alt = '';
+  img.classList.remove('revealed');
+});
+document.getElementById('shuffleBtn').addEventListener('click',(e)=>{
+  shuffleArray(deck);
+  updateUI();
+});
+document.getElementById('exportBtn').addEventListener('click',(e)=>{
+  const data = JSON.stringify(cards, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'deck.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* keyboard: Space draws */
+window.addEventListener('keydown', (ev)=>{
+  if(ev.code === 'Space' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA'){
+    ev.preventDefault();
+    drawCard();
+  }
+});
+
+/* init on first load */
+initDeck();
+
+/* show a subtle welcome placeholder */
+document.getElementById('cardTitle').textContent = 'Welcome — draw a card';
+</script>
+</body>
+</html>
